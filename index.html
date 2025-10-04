@@ -133,6 +133,9 @@
     const pasteBtn = $('pasteBtn');
     const psmSel = $('psm');
 
+    // Si no tienes U() definida en tu proyecto, usa esta identidad
+    window.U = window.U || function(x){ return (x ?? '').toString(); };
+
     let currentBlob = null;
 
     function setStatus(msg) { statusEl.textContent = msg; }
@@ -184,7 +187,7 @@
       }
     });
 
-    // Pegar desde portapapeles (Chrome/Edge/Opera/Arc)
+    // Pegar desde portapapeles
     pasteBtn.addEventListener('click', async () => {
       try {
         const items = await navigator.clipboard.read();
@@ -216,6 +219,360 @@
       fileInput.value = ''; urlInput.value = '';
     });
 
+    /******************************************************
+     *  🔎 Normalización + mapeo multilingüe + extracción
+     ******************************************************/
+    const CANON = {
+      DOCUMENT_TYPE: 'TIPO DOCUMENTO',
+      DOCUMENT_NUMBER: 'NºDOCUMENTO', // atendemos tu clave exacta
+      SEX: 'SEXO',
+      NATIONALITY: 'NACIONALIDAD',
+      NAME: 'NOMBRE',
+      SURNAME: 'APELLIDOS',
+      PARENTS_NAMES: 'Nombre de los Padres',
+      DOB: 'FECHA DE NACIMIENTO',
+      POB: 'LUGAR DE NACIMIENTO',
+      ADDRESS: 'DOMICILIO',
+      FATHER_NAME: 'FATHER_NAME',   // internos
+      MOTHER_NAME: 'MOTHER_NAME'
+    };
+
+    // etiquetas por idioma (solo las necesarias para tus 10 campos)
+    const LABELS = {
+      es: {
+        DOCUMENT_TYPE: ['TIPO DE DOCUMENTO','TIPO DOCUMENTO','CLASE DOCUMENTO','DOCUMENTO'],
+        DOCUMENT_NUMBER: ['NÚMERO DE DOCUMENTO','NUMERO DE DOCUMENTO','Nº DOCUMENTO','N° DOCUMENTO','N. DOCUMENTO','NO. DOCUMENTO','NUM. DOCUMENTO','NUMERO','NÚMERO','ID'],
+        SEX: ['SEXO','GÉNERO','GENERO'],
+        NATIONALITY: ['NACIONALIDAD','CIUDADANÍA','CIUDADANIA'],
+        NAME: ['NOMBRE','NOMBRES'],
+        SURNAME: ['APELLIDO','APELLIDOS','PRIMER APELLIDO','SEGUNDO APELLIDO'],
+        PARENTS_NAMES: ['NOMBRE DE LOS PADRES','PADRES','PADRE Y MADRE','NOMBRE DEL PADRE Y DE LA MADRE'],
+        DOB: ['FECHA DE NACIMIENTO','FEC. NAC.','NACIMIENTO'],
+        POB: ['LUGAR DE NACIMIENTO','CIUDAD DE NACIMIENTO','PAÍS DE NACIMIENTO','PAIS DE NACIMIENTO'],
+        ADDRESS: ['DOMICILIO','DIRECCIÓN','DIRECCION','RESIDENCIA','DOMICILIO HABITUAL','LUGAR DE RESIDENCIA'],
+        FATHER_NAME: ['NOMBRE DEL PADRE','PADRE'],
+        MOTHER_NAME: ['NOMBRE DE LA MADRE','MADRE']
+      },
+      en: {
+        DOCUMENT_TYPE: ['DOCUMENT TYPE','TYPE OF DOCUMENT','DOCUMENT'],
+        DOCUMENT_NUMBER: ['DOCUMENT NUMBER','DOC NUMBER','DOC NO','ID NUMBER','ID NO','NUMBER','NO.'],
+        SEX: ['SEX','GENDER'],
+        NATIONALITY: ['NATIONALITY','CITIZENSHIP'],
+        NAME: ['NAME','GIVEN NAME','GIVEN NAMES','FORENAME','FORENAMES','FIRST NAME'],
+        SURNAME: ['SURNAME','FAMILY NAME','LAST NAME'],
+        PARENTS_NAMES: ['PARENTS’ NAMES','PARENTS\' NAMES','PARENTS'],
+        DOB: ['DATE OF BIRTH','BIRTHDATE','DOB'],
+        POB: ['PLACE OF BIRTH','CITY OF BIRTH','COUNTRY OF BIRTH'],
+        ADDRESS: ['ADDRESS','RESIDENCE','RESIDENTIAL ADDRESS','HOME ADDRESS','MAILING ADDRESS'],
+        FATHER_NAME: ['FATHER’S NAME','FATHER NAME'],
+        MOTHER_NAME: ['MOTHER’S NAME','MOTHER NAME']
+      },
+      fr: {
+        DOCUMENT_TYPE: ['TYPE DE DOCUMENT','DOCUMENT','DOCUMENT D’IDENTITÉ','DOCUMENT D\'IDENTITE'],
+        DOCUMENT_NUMBER: ['NUMÉRO DE DOCUMENT','NUMERO DE DOCUMENT','N°','NO','NUM.'],
+        SEX: ['SEXE'],
+        NATIONALITY: ['NATIONALITÉ','NATIONALITE','CITOYENNETÉ','CITOYENNETE'],
+        NAME: ['PRÉNOM','PRENOM','PRÉNOMS','PRENOMS'],
+        SURNAME: ['NOM','NOM DE FAMILLE'],
+        PARENTS_NAMES: ['NOMS DES PARENTS','PÈRE ET MÈRE','PERE ET MERE'],
+        DOB: ['DATE DE NAISSANCE'],
+        POB: ['LIEU DE NAISSANCE','VILLE DE NAISSANCE','PAYS DE NAISSANCE'],
+        ADDRESS: ['ADRESSE','RÉSIDENCE','RESIDENCE','LIEU DE RÉSIDENCE'],
+        FATHER_NAME: ['NOM DU PÈRE','NOM DU PERE'],
+        MOTHER_NAME: ['NOM DE LA MÈRE','NOM DE LA MERE']
+      },
+      de: {
+        DOCUMENT_TYPE: ['DOKUMENTENTYP','ART DES DOKUMENTS','DOKUMENT','AUSWEISART'],
+        DOCUMENT_NUMBER: ['DOKUMENTNUMMER','AUSWEISNUMMER','PASSNUMMER','NR.','NUMMER'],
+        SEX: ['GESCHLECHT'],
+        NATIONALITY: ['STAATSANGEHÖRIGKEIT','STAATSANGEHOERIGKEIT'],
+        NAME: ['VORNAME','VORNAMEN'],
+        SURNAME: ['NACHNAME','FAMILIENNAME'],
+        PARENTS_NAMES: ['NAME DER ELTERN','ELTERN'],
+        DOB: ['GEBURTSDATUM'],
+        POB: ['GEBURTSORT','STADT DER GEBURT','LAND DER GEBURT'],
+        ADDRESS: ['ANSCHRIFT','WOHNSITZ','WOHNORT','AUFENTHALTSORT'],
+        FATHER_NAME: ['NAME DES VATERS'],
+        MOTHER_NAME: ['NAME DER MUTTER']
+      },
+      it: {
+        DOCUMENT_TYPE: ['TIPO DI DOCUMENTO','TIPO DOCUMENTO','DOCUMENTO'],
+        DOCUMENT_NUMBER: ['NUMERO DOCUMENTO','N.','NR','NUM.','N°','Nº'],
+        SEX: ['SESSO'],
+        NATIONALITY: ['NAZIONALITÀ','NAZIONALITA','CITTADINANZA'],
+        NAME: ['NOME','PRENOME'],
+        SURNAME: ['COGNOME'],
+        PARENTS_NAMES: ['NOMI DEI GENITORI','GENITORI'],
+        DOB: ['DATA DI NASCITA'],
+        POB: ['LUOGO DI NASCITA','CITTÀ DI NASCITA','PAESE DI NASCITA','CITTA DI NASCITA'],
+        ADDRESS: ['INDIRIZZO','RESIDENZA','DOMICILIO','INDIRIZZO DI RESIDENZA'],
+        FATHER_NAME: ['NOME DEL PADRE'],
+        MOTHER_NAME: ['NOME DELLA MADRE']
+      },
+      pt: {
+        DOCUMENT_TYPE: ['TIPO DE DOCUMENTO','DOCUMENTO','DOCUMENTO DE IDENTIDADE'],
+        DOCUMENT_NUMBER: ['NÚMERO DO DOCUMENTO','NUMERO DO DOCUMENTO','Nº','N°','N.','NO.','NUM.'],
+        SEX: ['SEXO','GÉNERO','GENERO'],
+        NATIONALITY: ['NACIONALIDADE','CIDADANIA'],
+        NAME: ['NOME','PRÉ-NOME','PRE-NOME'],
+        SURNAME: ['SOBRENOME','APELIDO'],
+        PARENTS_NAMES: ['NOMES DOS PAIS','PAIS'],
+        DOB: ['DATA DE NASCIMENTO'],
+        POB: ['LOCAL DE NASCIMENTO','CIDADE DE NASCIMENTO','PAÍS DE NASCIMENTO','PAIS DE NASCIMENTO'],
+        ADDRESS: ['MORADA','ENDEREÇO','RESIDÊNCIA','DOMICÍLIO','DOMICILIO','ENDEREÇO RESIDENCIAL'],
+        FATHER_NAME: ['NOME DO PAI'],
+        MOTHER_NAME: ['NOME DA MÃE','NOME DA MAE','MAE','MÃE']
+      },
+      ro: {
+        DOCUMENT_TYPE: ['TIP DOCUMENT','TIPUL DOCUMENTULUI','DOCUMENT','ACT DE IDENTITATE'],
+        DOCUMENT_NUMBER: ['NUMĂR DOCUMENT','NUMAR DOCUMENT','NR. DOCUMENT','NR DOCUMENT','NR.','NR','NUMAR','NUMĂR'],
+        SEX: ['SEX'],
+        NATIONALITY: ['NAȚIONALITATE','NATIONALITATE','CETĂȚENIE','CETATENIE'],
+        NAME: ['PRENUME','PRENUMELE'],          // nombre(s)
+        SURNAME: ['NUME','NUMELE'],             // apellido
+        PARENTS_NAMES: ['NUMELE PĂRINȚILOR','NUMELE PARINTILOR','PĂRINȚI','PARINTI'],
+        DOB: ['DATA NAȘTERII','DATA NASTERII'],
+        POB: ['LOCUL NAȘTERII','LOCUL NASTERII','ORAȘUL NAȘTERII','ORASUL NASTERII','ȚARA NAȘTERII','TARA NASTERII'],
+        ADDRESS: ['DOMICILIU','ADRESĂ','ADRESA','REȘEDINȚĂ','RESEDINTA'],
+        FATHER_NAME: ['NUMELE TATĂLUI','NUMELE TATALUI'],
+        MOTHER_NAME: ['NUMELE MAMEI']
+      }
+    };
+
+    // sinónimos cross-idioma para robustez
+    const CROSS = {
+      NAME: ['NOME','NAME','NOMBRE','NOM','VORNAME','PRENOME','PRÉNOM','PRENOM','PRENUME','GIVEN NAME','FIRST NAME'],
+      SURNAME: ['SURNAME','FAMILY NAME','LAST NAME','APELLIDO','APELLIDOS','NACHNAME','COGNOME','NOM DE FAMILLE','NUME'],
+      DOCUMENT_NUMBER: ['DOC NO','DOC NUMBER','ID NUMBER','NUMERO DOCUMENTO','DOKUMENTNUMMER','AUSWEISNUMMER','NUMÉRO DE DOCUMENT','Nº','N°','NR.','NO.','NUM.','NR'],
+      ADDRESS: ['ADDRESS','ADRESSE','ANSCHRIFT','INDIRIZZO','ENDEREÇO','DIRECCION','DIRECCIÓN','DOMICILIO','RESIDENCIA','MORADA','ADRESĂ','ADRESA','DOMICILIU','REȘEDINȚĂ','RESEDINTA'],
+      NATIONALITY: ['NATIONALITY','CITIZENSHIP','NATIONALITÉ','STAATSANGEHÖRIGKEIT','NAZIONALITÀ','NACIONALIDADE','NAȚIONALITATE','CETĂȚENIE'],
+      SEX: ['SEX','GENDER','SEXE','GESCHLECHT','SESSO','SEXO'],
+      DOB: ['DATE OF BIRTH','DOB','FECHA DE NACIMIENTO','DATE DE NAISSANCE','GEBURTSDATUM','DATA DI NASCITA','DATA DE NASCIMENTO','DATA NAȘTERII'],
+      POB: ['PLACE OF BIRTH','LUGAR DE NACIMIENTO','LIEU DE NAISSANCE','GEBURTSORT','LUOGO DI NASCITA','LOCAL DE NASCIMENTO','LOCUL NAȘTERII'],
+      PARENTS_NAMES: [
+        'PARENTS’ NAMES','NOMBRE DE LOS PADRES','NOMS DES PARENTS','NAME DER ELTERN','NOMI DEI GENITORI','NOMES DOS PAIS',
+        'FATHER’S NAME','MOTHER’S NAME','NOM DU PÈRE','NOM DE LA MÈRE','NAME DES VATERS','NAME DER MUTTER',
+        'NOME DEL PADRE','NOME DELLA MADRE','NOME DO PAI','NOME DA MÃE','NUMELE PĂRINȚILOR','NUMELE TATĂLUI','NUMELE MAMEI'
+      ],
+      FATHER_NAME: ['FATHER’S NAME','NOM DU PÈRE','NAME DES VATERS','NOME DEL PADRE','NOME DO PAI','NUMELE TATĂLUI'],
+      MOTHER_NAME: ['MOTHER’S NAME','NOM DE LA MÈRE','NAME DER MUTTER','NOME DELLA MADRE','NOME DA MÃE','NUMELE MAMEI']
+    };
+
+    const NORM = s => (s??'')
+      .normalize('NFD').replace(/\p{Diacritic}/gu,'')
+      .replace(/[^\p{L}\p{N}\s.:/-]/gu,'')
+      .replace(/\s+/g,' ')
+      .trim()
+      .toUpperCase();
+
+    function lev(a,b){a=a||'';b=b||'';const m=a.length,n=b.length;if(!m)return n;if(!n)return m;
+      const dp=new Array(n+1);for(let j=0;j<=n;j++)dp[j]=j;
+      for(let i=1;i<=m;i++){let prev=dp[0];dp[0]=i;for(let j=1;j<=n;j++){const t=dp[j];
+        const c=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+c);prev=t;}}return dp[n];}
+
+    function buildREV(){
+      const rev = new Map();
+      for(const [lang,groups] of Object.entries(LABELS)){
+        for(const [canonKey,arr] of Object.entries(groups)){
+          for(const raw of arr){ rev.set(NORM(raw), {canonKey, lang}); }
+        }
+      }
+      for(const [canonKey,arr] of Object.entries(CROSS)){
+        for(const raw of arr){ const k=NORM(raw); if(!rev.has(k)) rev.set(k,{canonKey, lang:'multi'}); }
+      }
+      return rev;
+    }
+    const REV = buildREV();
+
+    function detectLangByContext(words){
+      const tally = { es:0,en:0,fr:0,de:0,it:0,pt:0,ro:0 };
+      for(const w of (words||[])){
+        const t = NORM(w.text||'').replace(/[:.]$/,'');
+        const hit = REV.get(t); if(!hit) continue;
+        if(tally[hit.lang]!=null) tally[hit.lang]++;
+      }
+      let best=null,bestv=0; for(const [k,v] of Object.entries(tally)){ if(v>bestv){best=k;bestv=v;} }
+      return bestv>0?best:null;
+    }
+
+    function mapTokenToCanon(token, preferLang=null){
+      const T0 = NORM(token).replace(/[:.]$/,'');
+      const exact = REV.get(T0);
+      if(exact){ return { canon: CANON[exact.canonKey]||exact.canonKey, lang: exact.lang, score: 0, via: 'exact' }; }
+
+      let best = {canon:null,score:Infinity,lang:null,via:null};
+      const candidates=[];
+
+      if(preferLang && LABELS[preferLang]){
+        for(const [canonKey,arr] of Object.entries(LABELS[preferLang])){
+          for(const raw of arr) candidates.push({canonKey,lang:preferLang,raw});
+        }
+      }
+      for(const [canonKey,arr] of Object.entries(CROSS)){
+        for(const raw of arr) candidates.push({canonKey,lang:'multi',raw});
+      }
+
+      const Tclean = T0.replace(/0/g,'O').replace(/1/g,'I').replace(/5/g,'S').replace(/8/g,'B').replace(/RN/g,'M');
+
+      for(const c of candidates){
+        const R = NORM(c.raw);
+        const dist = Math.min(lev(T0,R), lev(Tclean,R));
+        const penalty = (preferLang && c.lang!==preferLang)?0.5:0;
+        const rel = (dist/Math.max(3,R.length)) + penalty;
+        if(rel < best.score){ best = { canon: CANON[c.canonKey]||c.canonKey, score: rel, lang:c.lang, via:'fuzzy' }; }
+      }
+      if(best.canon && best.score<=0.45) return best;
+      return { canon:null, score:1e9, lang:null, via:null };
+    }
+
+    function groupByLine(words, tolerance=8){
+      const rows=[];
+      const sorted=(words||[]).filter(w=>(w.text||'').trim()).map(w=>({...w,y:w.bbox?.y0??0,x:w.bbox?.x0??0}))
+        .sort((a,b)=> a.y-b.y || a.x-b.x);
+      for(const w of sorted){
+        const row = rows.find(r=>Math.abs(r.y-w.y)<=tolerance);
+        if(row){ row.items.push(w); row.y=(row.y+w.y)/2; }
+        else rows.push({y:w.y, items:[w]});
+      }
+      for(const r of rows) r.items.sort((a,b)=>a.x-b.x);
+      return rows;
+    }
+
+    function isLabelToken(t){
+      if(!t) return false;
+      const T=NORM(t);
+      if(REV.has(T)) return true;
+      return REV.has(T.replace(/[:.]$/,''));
+    }
+
+    function pickValueRightOf(labelWord, row, rows){
+      const same=row.items;
+      const idx=same.indexOf(labelWord);
+      let candidates=same.slice(idx+1);
+      if(candidates.length===0 || (candidates[0].x - labelWord.x) > 400){
+        const rowIdx=rows.indexOf(row);
+        if(rows[rowIdx+1]) candidates = rows[rowIdx+1].items;
+      }
+      const out=[];
+      for(const w of candidates){
+        const t=(w.text||'').trim();
+        if(!t) continue;
+        if(isLabelToken(t)) break;
+        if(/^[,;:]+$/.test(t)) continue;
+        out.push(t);
+        if(out.length>=6) break; // suficiente para nombres/apellidos compuestos o dirección corta
+      }
+      return out.join(' ').trim();
+    }
+
+    function unirApellidos(acc){
+      const list = acc.__apellidos || [];
+      const val = list.join(' ').replace(/\s+/g,' ').trim();
+      return val;
+    }
+
+    function extractFields(data){
+      const words = data.words || [];
+      const preferLang = detectLangByContext(words);
+      const rows = groupByLine(words);
+      const acc = {
+        [CANON.NAME]: '',
+        __apellidos: [],
+        [CANON.PARENTS_NAMES]: '',
+        [CANON.DOCUMENT_TYPE]: '',
+        [CANON.DOCUMENT_NUMBER]: '',
+        [CANON.SEX]: '',
+        [CANON.NATIONALITY]: '',
+        [CANON.DOB]: '',
+        [CANON.POB]: '',
+        [CANON.ADDRESS]: '',
+        [CANON.FATHER_NAME]: '',
+        [CANON.MOTHER_NAME]: ''
+      };
+
+      for(const row of rows){
+        for(const w of row.items){
+          const raw=(w.text||'').trim();
+          if(!raw || !isLabelToken(raw)) continue;
+
+          const map = mapTokenToCanon(raw, preferLang);
+          if(!map.canon) continue;
+
+          const value = pickValueRightOf(w, row, rows);
+          if(!value) continue;
+
+          const VAL = value
+            .replace(/rn/g,'m')
+            .replace(/(^|[^A-Z])0(?=[A-Z]|$)/g,'$1O')
+            .replace(/(^|[^A-Z])1(?=[A-Z]|$)/g,'$1I');
+
+          if(map.canon === CANON.NAME){
+            if(!acc[CANON.NAME]) acc[CANON.NAME]=VAL;
+          } else if(map.canon === CANON.SURNAME){
+            acc.__apellidos.push(VAL);
+          } else if(map.canon === CANON.PARENTS_NAMES){
+            if(!acc[CANON.PARENTS_NAMES]) acc[CANON.PARENTS_NAMES]=VAL;
+          } else if(map.canon === CANON.FATHER_NAME){
+            acc[CANON.FATHER_NAME]=VAL;
+          } else if(map.canon === CANON.MOTHER_NAME){
+            acc[CANON.MOTHER_NAME]=VAL;
+          } else if(map.canon === CANON.ADDRESS){
+            if(!acc[CANON.ADDRESS]) acc[CANON.ADDRESS]=VAL;
+          } else {
+            if(!acc[map.canon]) acc[map.canon]=VAL;
+          }
+        }
+      }
+
+      // Une apellidos si hay dos o más
+      const apellidos = unirApellidos(acc);
+      if(apellidos) acc[CANON.SURNAME]=apellidos;
+
+      // Si no hay "Nombre de los Padres" pero sí padre/madre, combínalos
+      if(!acc[CANON.PARENTS_NAMES]){
+        const padre = acc[CANON.FATHER_NAME];
+        const madre = acc[CANON.MOTHER_NAME];
+        const combo = [padre, madre].filter(Boolean).join(' / ');
+        if(combo) acc[CANON.PARENTS_NAMES]=combo;
+      }
+
+      return { acc, preferLang };
+    }
+
+    function buildExport(acc){
+      // Construye el objeto con EXACTAMENTE tus claves visibles
+      const data = {
+        "Nombre": acc[CANON.NAME] || "",
+        "APELLIDOS": acc[CANON.SURNAME] || "",
+        "TIPO DOCUMENTO": acc[CANON.DOCUMENT_TYPE] || "",
+        "NºDOCUMENTO": acc[CANON.DOCUMENT_NUMBER] || acc["NUMERO_DOCUMENTO"] || "",
+        "SEXO": acc[CANON.SEX] || "",
+        "NACIONALIDAD": acc[CANON.NATIONALITY] || "",
+        "Nombre de los Padres": acc[CANON.PARENTS_NAMES] || "",
+        "FECHA DE NACIMIENTO": acc[CANON.DOB] || "",
+        "LUGAR DE NACIMIENTO": acc[CANON.POB] || "",
+        "DOMICILIO": acc[CANON.ADDRESS] || ""
+      };
+
+      const domDisplay = data["DOMICILIO"] || "";
+
+      // Array final en el orden que pediste
+      const salida = [
+        ["Nombre", U(data["Nombre"])],
+        ["Apellidos", U(data["APELLIDOS"])],
+        ["Tipo de documento", U(data["TIPO DOCUMENTO"])],
+        ["Nº Documento", U(data["NºDOCUMENTO"])],
+        ["Sexo", U(data["SEXO"])],
+        ["Nacionalidad", U(data["NACIONALIDAD"])],
+        ["Nombre de los Padres", U(data["Nombre de los Padres"])],
+        ["Fecha de nacimiento", U(data["FECHA DE NACIMIENTO"])],
+        ["Lugar de nacimiento", U(data["LUGAR DE NACIMIENTO"])],
+        ["Domicilio", U(domDisplay)]
+      ];
+
+      return { data, salida, domDisplay };
+    }
+
     runBtn.addEventListener('click', async () => {
       if (!currentBlob) return setStatus('Sube o pega una imagen primero.');
       output.value = '';
@@ -239,14 +596,24 @@
           corePath: 'https://unpkg.com/tesseract.js-core@5.0.0/tesseract-core.wasm.js',
         });
 
-        // Opciones (PSM)
         await worker.setParameters({ tessedit_pageseg_mode: psm });
 
         setStatus('Procesando imagen…');
         const img = currentBlob;
 
         const { data } = await worker.recognize(img);
-        output.value = data.text.trim();
+
+        // === Post-proceso: detectar, normalizar y exportar ===
+        const { acc } = extractFields(data);
+        const { data: exportData, salida } = buildExport(acc);
+
+        // mostramos algo útil en la UI:
+        output.value =
+          '--- Campos normalizados ---\n' +
+          JSON.stringify(exportData, null, 2) +
+          '\n\n--- Array exportación ---\n' +
+          JSON.stringify(salida, null, 2);
+
         setProgress(1); setStatus('Completado ✔');
 
         await worker.terminate();
